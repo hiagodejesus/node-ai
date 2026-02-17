@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import { zodResponseFormat } from 'openai/helpers/zod.mjs';
 import { ChatCompletionTool, ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 import { z } from 'zod';
-import { productsinStock, productsOutOfStock } from './database';
+import { productsinStock, productsOutOfStock, allProducts, setEmbeddingForProduct } from './database';
 
 const schema = z.object({
     produtos: z.array(z.string()),
@@ -104,4 +104,29 @@ export async function generateProducts(message: string): Promise<string[]> {
     return completion.choices[0].message.parsed.produtos;
 }
 
-export default generateProducts;
+export const generateEmbeddings = async (text: string) => {
+    try {
+        const response = await openai.embeddings.create({
+            model: 'text-embedding-3-small',
+            input: text,
+            encoding_format: 'float',
+        });
+        return response.data[0].embedding;
+    } catch (error) {
+        throw new Error(`Error generating embeddings for text "${text}": ${error}`);
+    }
+};
+
+export const generateEmbeddingsForProducts = async () => {
+    const products = allProducts();
+
+    await Promise.allSettled(products.map(async (product) => {
+        const embedding = await generateEmbeddings(`${product.name}: ${product.description}`);
+        if (!embedding) {
+            console.error(`Failed to generate embedding for product: ${product.name}`);
+            return;
+        }
+        console.log(`Produto: ${product.name}, Embedding: ${embedding}`);
+        setEmbeddingForProduct(product.name, embedding);
+    }));
+};
