@@ -134,28 +134,71 @@ export const generateEmbeddingsForProducts = async () => {
     }));
 };
 
-export const generateResponse = async (params: ResponseCreateParamsNonStreaming) => {
+export const generateResponse = async<T = null> (params: ResponseCreateParamsNonStreaming) => {
     const response = await openai.responses.parse(params);
-    if (response.output_parsed) return response.output_parsed;
-    if (response.output_text) return response.output_text;
+    if (response.output_parsed) return response.output_parsed as T;
     return null;
 };
 
+const createCartPromptChunks = (input: string, products: string[]) => {
+    const chunkSize: number = 100;
+    const chunks: string[] = [];
+
+    for (let i = 0; i < products.length; i += chunkSize) {
+        const chunk = products.slice(i, i + chunkSize);
+        const prompt = `
+        Retorne uma lista de até 5 produtos que satistafaçam a necessidade do cliente.
+        Considere os seguintes produtos disponíveis: ${JSON.stringify(chunk)}. 
+        `;
+        chunks.push(prompt);
+    }
+
+    return chunks;
+}
+
 export const generateCart = async (input: string, products: string[]) => {
-    return generateResponse({
+    const ingredients = await openai.responses.create({
+        input: input,
+        model: 'gpt-4o-mini',
+        instructions: `
+        Retorne uma lista de até 5 produtos que satistafaçam a necessidade do cliente.
+        1. Divida a necessidade do cliente em componentes principais (ex: proteína, carboidrato, vegetal, etc).
+        2. Para cada componente, liste os ingredientes mais relevantes, considerando a similaridade semântica entre a descrição do ingrediente e a necessidade do cliente.
+        `,
+        text: {
+            format: zodTextFormat(z.object({
+                ingredients: z.array(z.string()),
+            }), 'ingredients_schema'),
+        }
+    });
+
+    const promises = createCartPromptChunks(input, products).map(prompt => generateResponse<{produtos: string[]}>({
         model: 'gpt-4o-mini',
         instructions: `Retorne uma lista de produtos similares aos produtos listados, considerando a similaridade semântica. Responda apenas com os produtos, sem explicações ou detalhes adicionais. Os produtos disponíveis são: ${JSON.stringify(products)} `,
-        input: input,
-        tools: [
-            {
-                type: 'file_search',
-                vector_store_ids: ['vs_68d9c8e1-9b8c-4f0a-9c3e-2b5e5f6a7c8d'],
-            }
-        ],
+        input: `${prompt}: ingredientes necessários ${ingredients}`,
         text: {
             format: zodTextFormat(schema, 'cart_schema'),
         }
-    });
+    }));
+
+    const results = await Promise.all(promises);
+
+    return results.filter(r => r && (r as any).produtos).flatMap(result => (result as any).produtos);
+
+    // return generateResponse({
+    //     model: 'gpt-4o-mini',
+    //     instructions: `Retorne uma lista de produtos similares aos produtos listados, considerando a similaridade semântica. Responda apenas com os produtos, sem explicações ou detalhes adicionais. Os produtos disponíveis são: ${JSON.stringify(products)} `,
+    //     input: input,
+    //     tools: [
+    //         {
+    //             type: 'file_search',
+    //             vector_store_ids: ['vs_68d9c8e1-9b8c-4f0a-9c3e-2b5e5f6a7c8d'],
+    //         }
+    //     ],
+    //     text: {
+    //         format: zodTextFormat(schema, 'cart_schema'),
+    //     }
+    // });
 }
 
 export const uploadFile = async (file: File) => {
