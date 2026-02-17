@@ -6,6 +6,8 @@ import { ChatCompletionTool, ChatCompletionMessageParam } from 'openai/resources
 import { z } from 'zod';
 import { productsinStock, productsOutOfStock, allProducts, setEmbeddingForProduct } from './database';
 import { ResponseCreateParamsNonStreaming } from 'openai/resources/responses/responses.mjs';
+import { writeFile } from 'node:fs';
+import path from 'node:path';
 
 const schema = z.object({
     produtos: z.array(z.string()),
@@ -127,8 +129,8 @@ export const generateEmbeddingsForProducts = async () => {
             console.error(`Failed to generate embedding for product: ${product.name}`);
             return;
         }
-        console.log(`Produto: ${product.name}, Embedding: ${embedding}`);
-        setEmbeddingForProduct(product.name, embedding);
+        console.log(`Produto: ${product.id}, Embedding: ${embedding}`);
+        setEmbeddingForProduct(product.id, embedding);
     }));
 };
 
@@ -174,4 +176,73 @@ export const createVector = async () => {
         file_ids: ["file-Y9u9jv1gqLh5mXoVZz8n2eG"],
     });
     console.dir(response, { depth: null });
+};
+
+export const createEmbeddingsBatchFile = async (products: string[]) => {
+    const content = products.map((product, index) => ({
+        custom_id: String(index),
+        method: 'POST',
+        url: '/v1/embeddings',
+        body: {
+            model: 'text-embedding-3-small',
+            input: product,
+            encoding_format: 'float',
+        },
+    })).map(product => JSON.stringify(product)).join('\n');
+
+    const file = new File([content], 'embeddings_batch.jsonl', { type: 'application/jsonl' });
+    const uploaded = openai.files.create({
+        file: file,
+        purpose: 'batch',
+    });
+    console.dir(uploaded, { depth: null });
+    return uploaded;
+
+};
+
+export const createEmbeddingsBatch = async (fileId: string) => {
+    const response = await openai.batches.create({
+        input_file_id: fileId,
+        endpoint: "/v1/embeddings",
+        completion_window: "24h",
+    });
+    console.dir(response, { depth: null });
+    return response;
+};
+
+export const getBatch = async (batchId: string) => {
+    const response = await openai.batches.retrieve(batchId);
+    console.dir(response, { depth: null });
+    return response;
 }
+
+export const getFileContent = async (fileId: string) => {
+    const response = await openai.files.content(fileId);
+    return response.text();
+};
+
+export const processEmbeddingsBatchResults = async (batchId: string) => {
+    const batchResponse = await getBatch(batchId);
+
+    if (batchResponse.status !== 'completed' || !batchResponse.output_file_id) {
+        throw new Error('Batch processing is still in progress or output file is missing');
+    }
+
+    const fileContent = await getFileContent(batchResponse.output_file_id);
+
+    const embeddings = fileContent.split('\n').map((line) => {
+        try {
+            const parsed = JSON.parse(line) as {
+                custom_id: string;
+                response: { body: { data: { embedding: number[] }[] } };
+            };
+            return {
+                id: Number(parsed.custom_id),
+                embeddings: (parsed.response.body.data[0] as { embedding: number[] }).embedding,
+            };
+        } catch (error) {
+            console.error(`Error parsing line: ${line}, error: ${error}`);
+            return null;
+        }
+    }).filter((item): item is { id: number; embeddings: number[] } => Boolean(item));
+};

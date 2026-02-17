@@ -1,23 +1,24 @@
 const products: {
+    id: number;
     name: string;
     stock: number;
     description: string;
     embedding?: number[];
 }[] = [
-        { name: "Arroz", stock: 100, description: "Arroz branco tipo 1" },
-        { name: "Feijão", stock: 50, description: "Feijão carioca" },
-        { name: "Macarrão", stock: 75, description: "Macarrão parafuso" },
-        { name: "Açúcar", stock: 200, description: "Açúcar refinado" },
-        { name: "Sal", stock: 120, description: "Sal grosso" },
-        { name: "Óleo", stock: 80, description: "Óleo de soja" },
-        { name: "Leite", stock: 60, description: "Leite integral" },
-        { name: "Café", stock: 90, description: "Café torrado e moído" },
-        { name: "Farinha", stock: 110, description: "Farinha de trigo" },
-        { name: "Biscoito", stock: 150, description: "Biscoito de chocolate" },
-        { name: "Molho de tomate", stock: 40, description: "Molho de tomate industrial" },
-        { name: "Atum", stock: 35, description: "Atum em lata" },
-        { name: "Sardinha", stock: 45, description: "Sardinha em lata" },
-    ];
+    { id: 1, name: "Arroz", stock: 100, description: "Arroz branco tipo 1" },
+    { id: 2, name: "Feijão", stock: 50, description: "Feijão carioca" },
+    { id: 3, name: "Macarrão", stock: 75, description: "Macarrão parafuso" },
+    { id: 4, name: "Açúcar", stock: 200, description: "Açúcar refinado" },
+    { id: 5, name: "Sal", stock: 120, description: "Sal grosso" },
+    { id: 6, name: "Óleo", stock: 80, description: "Óleo de soja" },
+    { id: 7, name: "Leite", stock: 60, description: "Leite integral" },
+    { id: 8, name: "Café", stock: 90, description: "Café torrado e moído" },
+    { id: 9, name: "Farinha", stock: 110, description: "Farinha de trigo" },
+    { id: 10, name: "Biscoito", stock: 150, description: "Biscoito de chocolate" },
+    { id: 11, name: "Molho de tomate", stock: 40, description: "Molho de tomate industrial" },
+    { id: 12, name: "Atum", stock: 35, description: "Atum em lata" },
+    { id: 13, name: "Sardinha", stock: 45, description: "Sardinha em lata" },
+];
 
 export const productsinStock = (productNames: string[]) => {
     return products.filter(product => productNames.includes(product.name)).map(product => product.name);
@@ -29,8 +30,8 @@ export const productsOutOfStock = (productNames: string[]) => {
 
 export const allProducts = () => [...products];
 
-export const setEmbeddingForProduct = (productName: string, embedding: number[]) => {
-    const product = products.find(p => p.name === productName);
+export const setEmbeddingForProduct = (productId: number, embedding: number[]) => {
+    const product = products.find(p => p.id === productId);
     if (product) {
         product.embedding = embedding;
     }

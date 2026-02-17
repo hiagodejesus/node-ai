@@ -1,6 +1,8 @@
 import express from 'express';
-import { generateProducts, generateEmbeddings, generateEmbeddingsForProducts, generateCart, uploadFile, createVector } from './openai';
-import { similarProducts } from './database';
+import { 
+    generateProducts, generateEmbeddings, generateEmbeddingsForProducts, generateCart, uploadFile, createVector, 
+    createEmbeddingsBatch, createEmbeddingsBatchFile, processEmbeddingsBatchResults,  } from './openai';
+import { setEmbeddingForProduct, similarProducts, allProducts } from './database';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 
@@ -82,6 +84,34 @@ app.post("/vector-store", async (req, res) => {
         console.error('Error generating vector store response:', error);
         res.status(500).send('Error generating vector store response');
     }
+});
+
+app.post("/embeddings-batch", async (req, res) => {
+    try {
+        const response = await createEmbeddingsBatchFile(req.body.products);
+        const batchResponse = await createEmbeddingsBatch(response.id);
+        res.json(batchResponse);
+    } catch (error) {
+        console.error('Error generating embeddings batch file:', error);
+        res.status(500).send('Error generating embeddings batch file');
+    }
+});
+
+app.post("/embeddings-batch/results", async (req, res) => {
+  const result = await processEmbeddingsBatchResults(req.body.batchId) as unknown as { id: number; embeddings: number[] }[] | null;
+  if (!result) {
+    res.status(200).json({message: 'Batch is still processing or failed. Please check the batch status and try again later.'});
+    return;
+  }
+  result.forEach((r) => setEmbeddingForProduct(r.id, r.embeddings));
+  res.status(200).json({message: 'Batch results processed successfully', products: result});
+});
+
+app.get("/products", async (req, res) => {
+    res.json(allProducts().map(product => ({
+        ...product,
+        embedding: product.embedding ? product.embedding.slice(0, 3) : null
+    })));
 });
 
 export default app;
