@@ -1,10 +1,11 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import OpenAI from 'openai';
-import { zodResponseFormat } from 'openai/helpers/zod.mjs';
+import { zodResponseFormat, zodTextFormat } from 'openai/helpers/zod.mjs';
 import { ChatCompletionTool, ChatCompletionMessageParam } from 'openai/resources/index.mjs';
 import { z } from 'zod';
 import { productsinStock, productsOutOfStock, allProducts, setEmbeddingForProduct } from './database';
+import { ResponseCreateParamsNonStreaming } from 'openai/resources/responses/responses.mjs';
 
 const schema = z.object({
     produtos: z.array(z.string()),
@@ -130,3 +131,47 @@ export const generateEmbeddingsForProducts = async () => {
         setEmbeddingForProduct(product.name, embedding);
     }));
 };
+
+export const generateResponse = async (params: ResponseCreateParamsNonStreaming) => {
+    const response = await openai.responses.parse(params);
+    if (response.output_parsed) return response.output_parsed;
+    if (response.output_text) return response.output_text;
+    return null;
+};
+
+export const generateCart = async (input: string, products: string[]) => {
+    return generateResponse({
+        model: 'gpt-4o-mini',
+        instructions: `Retorne uma lista de produtos similares aos produtos listados, considerando a similaridade semântica. Responda apenas com os produtos, sem explicações ou detalhes adicionais. Os produtos disponíveis são: ${JSON.stringify(products)} `,
+        input: input,
+        tools: [
+            {
+                type: 'file_search',
+                vector_store_ids: ['vs_68d9c8e1-9b8c-4f0a-9c3e-2b5e5f6a7c8d'],
+            }
+        ],
+        text: {
+            format: zodTextFormat(schema, 'cart_schema'),
+        }
+    });
+}
+
+export const uploadFile = async (file: File) => {
+    try {
+        const response = await openai.files.create({
+            file: file,
+            purpose: 'assistants',
+        });
+        console.dir(response, { depth: null });
+    } catch (error) {
+        throw new Error(`Error uploading file: ${error}`);
+    }
+};
+
+export const createVector = async () => {
+    const response = await openai.vectorStores.create({
+        name: 'node-ai-file-search-class',
+        file_ids: ["file-Y9u9jv1gqLh5mXoVZz8n2eG"],
+    });
+    console.dir(response, { depth: null });
+}
